@@ -1,0 +1,9 @@
+app = "micro-mentor-backend"
+# Use the local Dockerfile in repository root
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+# DATABASE_URL and SECRET_KEY should be set with flyctl secrets, not stored here.
+# DATABASE_URL = "postgresql://..."
+# SECRET_KEY = "replace-with-a-secret"

@@ -1,0 +1,49 @@
+{
+  "family": "micro-mentor-task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::886009424627:role/micro-mentor-ecs-task-role",
+  "taskRoleArn": "arn:aws:iam::886009424627:role/micro-mentor-ecs-task-role",
+  "containerDefinitions": [
+    {
+      "name": "micro-mentor-container",
+      "image": "886009424627.dkr.ecr.us-east-1.amazonaws.com/micro-mentor-backend:latest",
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "protocol": "tcp"
+        }
+      ],
+      "essential": true,
+      "secrets": [
+        {
+          "name": "SECRET_KEY",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:886009424627:secret:micro-mentor/prod-kB5hqk:SECRET_KEY::"
+        },
+        {
+          "name": "DATABASE_URL",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:886009424627:secret:micro-mentor/prod-kB5hqk:DATABASE_URL::"
+        },
+        {
+          "name": "DEBUG",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:886009424627:secret:micro-mentor/prod-kB5hqk:DEBUG::"
+        },
+        {
+          "name": "PORT",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:886009424627:secret:micro-mentor/prod-kB5hqk:PORT::"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/micro-mentor",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs",
+          "awslogs-create-group": "true"
+        }
+      }
+    }
+  ]
+}

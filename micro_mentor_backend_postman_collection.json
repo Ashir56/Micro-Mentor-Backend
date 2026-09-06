@@ -1,0 +1,910 @@
+{
+  "info": {
+    "name": "Micro Mentor Backend API",
+    "_postman_id": "1b0f2d7f-1e4a-4b82-8f4a-6a1f9d03a561",
+    "description": "Micro Mentor Backend API Collection.\n\nBase URL is set to the AWS ALB endpoint. Change `base_url` variable if needed.\n\nAfter Register or Login, `access_token` and `refresh_token` are saved automatically.\nProtected APIs send `Authorization: Bearer {{access_token}}`.\n\nFor mentor registration, all fields (headline, bio, etc.) are included in the single register call — no separate mentor-profile creation needed.\n\nFor list fields such as `category_ids`, `expertise_ids`, send comma-separated IDs like `1,2`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://micro-mentor-alb-869670005.us-east-1.elb.amazonaws.com/api",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refresh_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "mentor_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "category_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "expertise_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "package_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "availability_window_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "session_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "review_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "conversation_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "other_user_id",
+      "value": "2",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register Mentee",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const json = pm.response.json();",
+                  "  if (json.access_token) pm.collectionVariables.set('access_token', json.access_token);",
+                  "  if (json.refresh_token) pm.collectionVariables.set('refresh_token', json.refresh_token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{base_url}}/auth/register/" },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "email", "value": "mentee@example.com", "type": "text" },
+                { "key": "password", "value": "SuperSecure123", "type": "text" },
+                { "key": "first_name", "value": "Jane", "type": "text" },
+                { "key": "last_name", "value": "Doe", "type": "text" },
+                { "key": "role", "value": "mentee", "type": "text", "description": "Use mentee or mentor." },
+                { "key": "city", "value": "New York", "type": "text", "description": "Optional." },
+                { "key": "linkedin_url", "value": "", "type": "text", "description": "Optional." }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "status": "Created",
+              "code": 201,
+              "body": "{\n  \"id\": 1,\n  \"email\": \"mentee@example.com\",\n  \"role\": \"mentee\",\n  \"access_token\": \"<token>\",\n  \"refresh_token\": \"<token>\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Register Mentor",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const json = pm.response.json();",
+                  "  if (json.access_token) pm.collectionVariables.set('access_token', json.access_token);",
+                  "  if (json.refresh_token) pm.collectionVariables.set('refresh_token', json.refresh_token);",
+                  "  if (json.mentor_profile_id) pm.collectionVariables.set('mentor_id', String(json.mentor_profile_id));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{base_url}}/auth/register/" },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "email", "value": "mentor@example.com", "type": "text" },
+                { "key": "password", "value": "SuperSecure123", "type": "text" },
+                { "key": "first_name", "value": "Alex", "type": "text" },
+                { "key": "last_name", "value": "Smith", "type": "text" },
+                { "key": "role", "value": "mentor", "type": "text" },
+                { "key": "headline", "value": "Senior Engineer at Google", "type": "text", "description": "Required for mentor." },
+                { "key": "bio", "value": "10 years of experience helping engineers grow.", "type": "text", "description": "Required for mentor." },
+                { "key": "company", "value": "Google", "type": "text", "description": "Optional." },
+                { "key": "years_experience", "value": "10", "type": "text", "description": "Optional." },
+                { "key": "city", "value": "San Francisco", "type": "text", "description": "Optional." },
+                { "key": "linkedin_url", "value": "https://linkedin.com/in/alexsmith", "type": "text", "description": "Optional." },
+                { "key": "intro_video_url", "value": "", "type": "text", "description": "Optional." },
+                { "key": "auto_confirm_bookings", "value": "true", "type": "text", "description": "Optional. Default true." },
+                { "key": "category_ids", "value": "1,2", "type": "text", "description": "Optional. Comma-separated category IDs." },
+                { "key": "expertise_ids", "value": "1,2", "type": "text", "description": "Optional. Comma-separated expertise IDs." }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "status": "Created",
+              "code": 201,
+              "body": "{\n  \"id\": 2,\n  \"email\": \"mentor@example.com\",\n  \"role\": \"mentor\",\n  \"mentor_profile_id\": 1,\n  \"access_token\": \"<token>\",\n  \"refresh_token\": \"<token>\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const json = pm.response.json();",
+                  "  if (json.access_token) pm.collectionVariables.set('access_token', json.access_token);",
+                  "  if (json.refresh_token) pm.collectionVariables.set('refresh_token', json.refresh_token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{base_url}}/auth/login/" },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "email", "value": "mentee@example.com", "type": "text" },
+                { "key": "password", "value": "SuperSecure123", "type": "text" }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"id\": 1,\n  \"email\": \"mentee@example.com\",\n  \"access_token\": \"<token>\",\n  \"refresh_token\": \"<token>\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Token Refresh",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const json = pm.response.json();",
+                  "  if (json.access_token) pm.collectionVariables.set('access_token', json.access_token);",
+                  "  if (json.refresh_token) pm.collectionVariables.set('refresh_token', json.refresh_token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{base_url}}/auth/token/refresh/" },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "refresh_token", "value": "{{refresh_token}}", "type": "text" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}", "type": "text" }
+            ],
+            "url": { "raw": "{{base_url}}/auth/logout/" }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "App / Discovery",
+      "item": [
+        {
+          "name": "Home",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}", "type": "text" }
+            ],
+            "url": { "raw": "{{base_url}}/home/" }
+          },
+          "response": []
+        },
+        {
+          "name": "List Mentors",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/mentors/?q=&category=",
+              "query": [
+                { "key": "q", "value": "", "description": "Search by name, headline, company, expertise." },
+                { "key": "category", "value": "", "description": "Filter by category slug." }
+              ]
+            },
+            "description": "Public endpoint. No auth required."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Mentor Detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/mentors/{{mentor_id}}/" },
+            "description": "Public endpoint. No auth required."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Mentor Availability",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/mentors/{{mentor_id}}/availability/" },
+            "description": "Public endpoint. No auth required."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Booking",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}", "type": "text" }
+            ],
+            "url": { "raw": "{{base_url}}/bookings/" },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "package_id", "value": "{{package_id}}", "type": "text" },
+                { "key": "starts_at", "value": "2026-09-20T15:00:00Z", "type": "text" },
+                { "key": "goals", "value": "Discuss career growth", "type": "text" },
+                { "key": "topic", "value": "Career development", "type": "text" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Session Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}", "type": "text" }
+            ],
+            "url": { "raw": "{{base_url}}/sessions/{{session_id}}/" }
+          },
+          "response": []
+        },
+        {
+          "name": "Confirm Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}", "type": "text" }
+            ],
+            "url": { "raw": "{{base_url}}/sessions/{{session_id}}/payment/confirm/" },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "provider_payment_id", "value": "stripe_tx_12345", "type": "text" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Complete Session",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}", "type": "text" }
+            ],
+            "url": { "raw": "{{base_url}}/sessions/{{session_id}}/complete/" }
+          },
+          "response": []
+        },
+        {
+          "name": "Submit Session Review",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}", "type": "text" }
+            ],
+            "url": { "raw": "{{base_url}}/sessions/{{session_id}}/review/" },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "rating", "value": "5", "type": "text", "description": "1-5" },
+                { "key": "body", "value": "Great session with actionable guidance.", "type": "text" }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Profile",
+      "item": [
+        {
+          "name": "Get My Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}", "type": "text" }
+            ],
+            "url": { "raw": "{{base_url}}/profile/" }
+          },
+          "response": []
+        },
+        {
+          "name": "Mentor Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}", "type": "text" }
+            ],
+            "url": { "raw": "{{base_url}}/mentor-dashboard/" },
+            "description": "Requires authenticated mentor user."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Categories",
+      "item": [
+        {
+          "name": "List Categories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/categories/" },
+            "description": "Public endpoint. No auth required."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Category",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{base_url}}/categories/" },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "name", "value": "Productivity", "type": "text" },
+                { "key": "emoji", "value": "🚀", "type": "text" },
+                { "key": "slug", "value": "productivity", "type": "text" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Category",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/categories/{{category_id}}/" }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Category",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": { "raw": "{{base_url}}/categories/{{category_id}}/" },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "name", "value": "Career", "type": "text" },
+                { "key": "emoji", "value": "💼", "type": "text" },
+                { "key": "slug", "value": "career", "type": "text" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Category",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{base_url}}/categories/{{category_id}}/" }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Expertise",
+      "item": [
+        {
+          "name": "List Expertise",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/expertise/" },
+            "description": "Public endpoint. No auth required."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Expertise",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{base_url}}/expertise/" },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "name", "value": "Career Coaching", "type": "text" },
+                { "key": "slug", "value": "career-coaching", "type": "text" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Expertise",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/expertise/{{expertise_id}}/" }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Expertise",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": { "raw": "{{base_url}}/expertise/{{expertise_id}}/" },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "name", "value": "Startup Strategy", "type": "text" },
+                { "key": "slug", "value": "startup-strategy", "type": "text" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Expertise",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{base_url}}/expertise/{{expertise_id}}/" }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Mentor Profiles",
+      "item": [
+        {
+          "name": "List Mentor Profiles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/mentor-profiles/" }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Mentor Profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/mentor-profiles/{{mentor_id}}/" }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Mentor Profile",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}", "type": "text" }
+            ],
+            "url": { "raw": "{{base_url}}/mentor-profiles/{{mentor_id}}/" },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "headline", "value": "Principal Product Mentor", "type": "text" },
+                { "key": "company", "value": "New Tech Co", "type": "text" },
+                { "key": "bio", "value": "Updated mentor bio.", "type": "text" },
+                { "key": "years_experience", "value": "10", "type": "text" },
+                { "key": "category_ids", "value": "1,2", "type": "text" },
+                { "key": "expertise_ids", "value": "1,3", "type": "text" },
+                { "key": "intro_video_url", "value": "https://example.com/video", "type": "text" },
+                { "key": "auto_confirm_bookings", "value": "true", "type": "text" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Deactivate Mentor Profile",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}", "type": "text" }
+            ],
+            "url": { "raw": "{{base_url}}/mentor-profiles/{{mentor_id}}/" },
+            "description": "Soft delete — sets is_active=false."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Packages",
+      "item": [
+        {
+          "name": "List Packages",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/packages/?mentor_id={{mentor_id}}" }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Package",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}", "type": "text" }
+            ],
+            "url": { "raw": "{{base_url}}/packages/" },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "mentor_id", "value": "{{mentor_id}}", "type": "text" },
+                { "key": "duration_minutes", "value": "60", "type": "text" },
+                { "key": "price_usd", "value": "99.00", "type": "text" },
+                { "key": "is_popular", "value": "true", "type": "text" },
+                { "key": "is_active", "value": "true", "type": "text" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Package",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/packages/{{package_id}}/" }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Package",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}", "type": "text" }
+            ],
+            "url": { "raw": "{{base_url}}/packages/{{package_id}}/" },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "price_usd", "value": "120.00", "type": "text" },
+                { "key": "is_popular", "value": "true", "type": "text" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Package",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}", "type": "text" }
+            ],
+            "url": { "raw": "{{base_url}}/packages/{{package_id}}/" }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Availability Windows",
+      "item": [
+        {
+          "name": "List Availability Windows",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/availability-windows/?mentor_id={{mentor_id}}" }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Availability Window",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}", "type": "text" }
+            ],
+            "url": { "raw": "{{base_url}}/availability-windows/" },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "mentor_id", "value": "{{mentor_id}}", "type": "text" },
+                { "key": "weekday", "value": "0", "type": "text", "description": "0=Monday ... 6=Sunday" },
+                { "key": "starts_at", "value": "09:00", "type": "text" },
+                { "key": "ends_at", "value": "17:00", "type": "text" },
+                { "key": "timezone", "value": "America/New_York", "type": "text" },
+                { "key": "slot_interval_minutes", "value": "30", "type": "text" },
+                { "key": "is_active", "value": "true", "type": "text" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Availability Window",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/availability-windows/{{availability_window_id}}/" }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Availability Window",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}", "type": "text" }
+            ],
+            "url": { "raw": "{{base_url}}/availability-windows/{{availability_window_id}}/" },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "starts_at", "value": "10:00", "type": "text" },
+                { "key": "ends_at", "value": "18:00", "type": "text" },
+                { "key": "is_active", "value": "true", "type": "text" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Availability Window",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}", "type": "text" }
+            ],
+            "url": { "raw": "{{base_url}}/availability-windows/{{availability_window_id}}/" }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Reviews",
+      "item": [
+        {
+          "name": "List Reviews",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/reviews/?mentor_id={{mentor_id}}",
+              "query": [
+                { "key": "mentor_id", "value": "{{mentor_id}}", "description": "Optional filter." },
+                { "key": "session_id", "value": "", "description": "Optional filter." }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Review",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}", "type": "text" }
+            ],
+            "url": { "raw": "{{base_url}}/reviews/{{review_id}}/" }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Review",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}", "type": "text" }
+            ],
+            "url": { "raw": "{{base_url}}/reviews/{{review_id}}/" },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "rating", "value": "4", "type": "text" },
+                { "key": "body", "value": "Updated review body.", "type": "text" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Review",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}", "type": "text" }
+            ],
+            "url": { "raw": "{{base_url}}/reviews/{{review_id}}/" }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "Get Payment",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}", "type": "text" }
+            ],
+            "url": { "raw": "{{base_url}}/payments/{{session_id}}/" }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Conversations & Messages",
+      "item": [
+        {
+          "name": "List Conversations",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}", "type": "text" }
+            ],
+            "url": { "raw": "{{base_url}}/conversations/" }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Conversation",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}", "type": "text" }
+            ],
+            "url": { "raw": "{{base_url}}/conversations/" },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "participant_ids", "value": "{{other_user_id}}", "type": "text", "description": "Comma-separated user IDs to add." },
+                { "key": "related_session_id", "value": "", "type": "text", "description": "Optional session ID to link." }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Conversation",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}", "type": "text" }
+            ],
+            "url": { "raw": "{{base_url}}/conversations/{{conversation_id}}/" }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Conversation",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}", "type": "text" }
+            ],
+            "url": { "raw": "{{base_url}}/conversations/{{conversation_id}}/" }
+          },
+          "response": []
+        },
+        {
+          "name": "List Messages",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}", "type": "text" }
+            ],
+            "url": { "raw": "{{base_url}}/conversations/{{conversation_id}}/messages/" }
+          },
+          "response": []
+        },
+        {
+          "name": "Send Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}", "type": "text" }
+            ],
+            "url": { "raw": "{{base_url}}/conversations/{{conversation_id}}/messages/" },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "body", "value": "Hello! I'd love to connect.", "type": "text" }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
