@@ -33,6 +33,38 @@
         {
           "name": "PORT",
           "valueFrom": "arn:aws:secretsmanager:us-east-1:886009424627:secret:micro-mentor/prod-kB5hqk:PORT::"
+        },
+        {
+          "name": "AWS_ACCESS_KEY_ID",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:886009424627:secret:micro-mentor/prod-kB5hqk:AWS_ACCESS_KEY_ID::"
+        },
+        {
+          "name": "AWS_SECRET_ACCESS_KEY",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:886009424627:secret:micro-mentor/prod-kB5hqk:AWS_SECRET_ACCESS_KEY::"
+        },
+        {
+          "name": "AWS_STORAGE_BUCKET_NAME",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:886009424627:secret:micro-mentor/prod-kB5hqk:AWS_STORAGE_BUCKET_NAME::"
+        },
+        {
+          "name": "AWS_S3_REGION_NAME",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:886009424627:secret:micro-mentor/prod-kB5hqk:AWS_S3_REGION_NAME::"
+        },
+        {
+          "name": "REQUIRE_DOCUMENTS_FOR_SUBMISSION",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:886009424627:secret:micro-mentor/prod-kB5hqk:REQUIRE_DOCUMENTS_FOR_SUBMISSION::"
+        },
+        {
+          "name": "JWT_ACCESS_MINUTES",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:886009424627:secret:micro-mentor/prod-kB5hqk:JWT_ACCESS_MINUTES::"
+        },
+        {
+          "name": "JWT_REFRESH_DAYS",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:886009424627:secret:micro-mentor/prod-kB5hqk:JWT_REFRESH_DAYS::"
+        },
+        {
+          "name": "CORS_ALLOWED_ORIGINS",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:886009424627:secret:micro-mentor/prod-kB5hqk:CORS_ALLOWED_ORIGINS::"
         }
       ],
       "logConfiguration": {

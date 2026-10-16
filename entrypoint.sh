@@ -1,7 +1,7 @@
 #!/bin/sh
 set -u
 
-# Default to 8080 if PORT not provided by host
+# Render sets $PORT automatically. Fall back to 8080 for other platforms.
 : "${PORT:=8080}"
 
 echo "ENTRYPOINT START: $(date)"
@@ -16,14 +16,14 @@ fi
 if python manage.py collectstatic --noinput --clear; then
     echo "Collectstatic completed"
 else
-    echo "Collectstatic failed; continuing so the app can still start"
+    echo "Collectstatic failed; continuing"
 fi
 
-# Debugging output to help diagnose startup issues in logs
-set -x
-echo "Starting app with PORT=${PORT}"
-echo "Python: $(python --version 2>&1)"
-echo "Gunicorn (via python -m) available:"
-python -m pip show gunicorn || true
-
-exec python -m gunicorn micro_mentor.wsgi:application --bind 0.0.0.0:${PORT} --workers 3 --access-logfile - --log-level debug
+echo "Starting gunicorn on port ${PORT}"
+exec python -m gunicorn micro_mentor.wsgi:application \
+    --bind 0.0.0.0:${PORT} \
+    --workers 2 \
+    --timeout 120 \
+    --access-logfile - \
+    --error-logfile - \
+    --log-level info

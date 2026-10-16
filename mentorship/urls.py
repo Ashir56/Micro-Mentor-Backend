@@ -33,8 +33,10 @@ urlpatterns = [
     path("availability-windows/<int:window_id>/", views.availability_window_detail, name="availability-window-detail"),
 
     # Bookings and sessions
-    path("bookings/", views.create_booking, name="create-booking"),
+    path("bookings/", views.bookings, name="bookings"),
+    path("sessions/", views.session_list, name="session-list"),
     path("sessions/<int:session_id>/", views.session_detail, name="session-detail"),
+    path("sessions/<int:session_id>/cancel/", views.cancel_session, name="session-cancel"),
     path("sessions/<int:session_id>/payment/confirm/", views.confirm_payment, name="confirm-payment"),
     path("sessions/<int:session_id>/complete/", views.complete_session, name="complete-session"),
     path("sessions/<int:session_id>/review/", views.create_review, name="create-review"),
@@ -52,6 +54,9 @@ urlpatterns = [
     # User profile and dashboard
     path("profile/", views.profile, name="profile"),
     path("mentor-dashboard/", views.mentor_dashboard, name="mentor-dashboard"),
+
+    # Health (unauthenticated liveness probe)
+    path("health/", views.health_check, name="api-health"),
 
     # -----------------------------------------------------------------------
     # Mentor onboarding (mentor-owner only)

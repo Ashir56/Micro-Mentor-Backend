@@ -485,11 +485,19 @@ def availability_window_list(request):
         return Response({"results": [_availability_window_payload(window) for window in windows]})
 
     data = _get_request_data(request)
-    mentor, error = _get_requested_mentor_profile(request)
-    if error is not None:
-        return error
-    if not _can_manage_mentor(request, mentor):
-        return Response({"detail": "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
+
+    # Ownership: derive the mentor profile from the authenticated user, not client-supplied ID.
+    # Accept an explicit mentor_id only if the caller is staff; otherwise always use the token owner.
+    if request.user.is_staff:
+        mentor, error = _get_requested_mentor_profile(request)
+        if error is not None:
+            return error
+        if not _can_manage_mentor(request, mentor):
+            return Response({"detail": "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
+    else:
+        mentor = MentorProfile.objects.filter(user=request.user).first()
+        if mentor is None:
+            return Response({"detail": "No mentor profile found for this account."}, status=status.HTTP_403_FORBIDDEN)
 
     window = AvailabilityWindow.objects.create(
         mentor=mentor,
@@ -613,9 +621,20 @@ def conversations(request):
         if _user_role(request.user) != UserProfile.Role.MENTEE:
             return Response({"detail": "Only mentees can start inquiry conversations."}, status=status.HTTP_403_FORBIDDEN)
 
-        mentor, mentor_error = _get_requested_mentor_profile(request)
-        if mentor_error is not None:
-            return mentor_error
+        # Accept domain payload: {type, mentor_id} where mentor_id is MentorProfile.id
+        # Also accept legacy {type, mentor_profile_id} alias
+        raw_mentor_id = data.get("mentor_id") or data.get("mentor_profile_id")
+        if raw_mentor_id in (None, ""):
+            return Response({"detail": "mentor_id is required for inquiry conversations."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            mentor_profile_id = int(raw_mentor_id)
+        except (TypeError, ValueError):
+            return Response({"detail": "mentor_id must be an integer."}, status=status.HTTP_400_BAD_REQUEST)
+
+        mentor = MentorProfile.objects.filter(id=mentor_profile_id).first()
+        if mentor is None:
+            return Response({"detail": "Mentor not found."}, status=status.HTTP_404_NOT_FOUND)
+
         if not mentor.allow_pre_booking_messages:
             return Response({"detail": "This mentor is not accepting inquiry chats."}, status=status.HTTP_403_FORBIDDEN)
 
@@ -809,7 +828,38 @@ def login_view(request):
     user = authenticate(request, username=data.get("email"), password=data.get("password"))
     if user is None:
         return Response({"detail": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
-    return Response({"id": user.id, "email": user.email, **_tokens_for_user(user)})
+
+    profile = getattr(user, "profile", None)
+    role = profile.role if profile else UserProfile.Role.MENTEE
+
+    response_data = {
+        "id": user.id,
+        "email": user.email,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "role": role,
+        **_tokens_for_user(user),
+    }
+
+    # Include mentor-specific routing data so the app doesn't need a second request.
+    if role == UserProfile.Role.MENTOR:
+        mentor_profile = getattr(user, "mentorprofile", None)
+        if mentor_profile:
+            response_data["mentor_profile_id"] = mentor_profile.id
+        else:
+            response_data["mentor_profile_id"] = None
+
+        application = getattr(user, "mentor_application", None)
+        if application:
+            response_data["onboarding"] = {
+                "application_id": application.id,
+                "status": application.status,
+                "current_step": application.current_step,
+                "completion_percent": application.completion_percent,
+                "version": application.version,
+            }
+
+    return Response(response_data)
 
 
 @api_view(("POST",))
@@ -855,13 +905,57 @@ def mentor_dashboard(request):
     if not hasattr(request.user, "mentorprofile"):
         return Response({"detail": "User is not a mentor."}, status=status.HTTP_403_FORBIDDEN)
     mentor = request.user.mentorprofile
-    upcoming = (
-        MentorshipSession.objects.filter(mentor=mentor, starts_at__gte=timezone.now())
+    now = timezone.now()
+
+    all_sessions = MentorshipSession.objects.filter(mentor=mentor)
+    completed_sessions = all_sessions.filter(status=MentorshipSession.Status.COMPLETED)
+    upcoming_sessions = (
+        all_sessions.filter(starts_at__gte=now)
         .exclude(status=MentorshipSession.Status.CANCELLED)
+    )
+    total_non_draft = all_sessions.exclude(status=MentorshipSession.Status.DRAFT)
+
+    earnings = (
+        Payment.objects.filter(session__mentor=mentor, status=Payment.Status.PAID)
+        .aggregate(total=Sum("amount_usd"))["total"] or 0
+    )
+
+    # Average rating from published reviews only
+    from django.db.models import Count as DCount
+    rating_data = (
+        mentor.reviews
+        .filter(visibility_status=Review.VisibilityStatus.PUBLISHED)
+        .aggregate(avg=Avg("rating"), count=DCount("id"))
+    )
+    avg_rating = round(rating_data["avg"] or 0, 2)
+    review_count = rating_data["count"]
+
+    # Repeat client rate — mentees with more than one completed session
+    completed_mentee_ids = (
+        completed_sessions.values_list("mentee_id", flat=True)
+    )
+    total_unique_mentees = completed_sessions.values("mentee").distinct().count()
+    repeat_mentees = (
+        completed_sessions.values("mentee")
+        .annotate(cnt=DCount("id"))
+        .filter(cnt__gt=1)
         .count()
     )
-    earnings = Payment.objects.filter(session__mentor=mentor, status=Payment.Status.PAID).aggregate(total=Sum("amount_usd"))["total"] or 0
-    return Response({"mentor_id": mentor.id, "upcoming_sessions": upcoming, "earnings_usd": float(earnings)})
+    repeat_client_percent = round(
+        (repeat_mentees / total_unique_mentees * 100) if total_unique_mentees else 0, 1
+    )
+
+    return Response({
+        "mentor_id": mentor.id,
+        "total_sessions": total_non_draft.count(),
+        "completed_sessions": completed_sessions.count(),
+        "upcoming_sessions_count": upcoming_sessions.count(),
+        "earnings_usd": float(earnings),
+        "currency": "USD",
+        "average_rating": avg_rating,
+        "review_count": review_count,
+        "repeat_client_percent": repeat_client_percent,
+    })
 
 
 @api_view(("GET",))
@@ -907,7 +1001,30 @@ def mentor_list(request):
     if category:
         mentors = mentors.filter(categories__slug=category)
 
-    return Response({"results": [_mentor_summary(mentor) for mentor in mentors]})
+    # Pagination
+    try:
+        page = max(1, int(request.query_params.get("page", 1)))
+        page_size = min(100, max(1, int(request.query_params.get("page_size", 20))))
+    except (TypeError, ValueError):
+        page, page_size = 1, 20
+
+    total = mentors.count()
+    start = (page - 1) * page_size
+    page_qs = mentors[start: start + page_size]
+
+    base_url = request.build_absolute_uri(request.path)
+    def _page_url(p):
+        params = request.query_params.copy()
+        params["page"] = p
+        params["page_size"] = page_size
+        return base_url + "?" + "&".join(f"{k}={v}" for k, v in params.items())
+
+    return Response({
+        "count": total,
+        "next": _page_url(page + 1) if start + page_size < total else None,
+        "previous": _page_url(page - 1) if page > 1 else None,
+        "results": [_mentor_summary(mentor) for mentor in page_qs],
+    })
 
 
 @api_view(("GET",))
@@ -939,54 +1056,93 @@ def mentor_detail(request, mentor_id):
 @authentication_classes([])
 @permission_classes([AllowAny])
 def mentor_availability(request, mentor_id):
+    """
+    Without date params: returns weekly recurring windows + booked start times (legacy behaviour).
+    With ?from=&to=&duration_minutes=&timezone= : returns concrete bookable slots for the range.
+    """
+    import zoneinfo
+    from datetime import date, datetime, timedelta as td
+
     mentor = get_object_or_404(_verified_mentor_qs(), id=mentor_id)
     booked = mentor.sessions.filter(starts_at__gte=timezone.now()).exclude(
         status__in=[MentorshipSession.Status.DRAFT, MentorshipSession.Status.CANCELLED]
     )
-    return Response(
-        {
-            "mentor_id": mentor.id,
-            "weekly_windows": [_availability_window_payload(window) for window in mentor.availability.filter(is_active=True)],
-            "booked_starts": list(booked.values_list("starts_at", flat=True)),
-        }
-    )
 
+    from_str = request.query_params.get("from")
+    to_str = request.query_params.get("to")
 
-@api_view(("POST",))
-@authentication_classes([JWTAuthentication])
-@permission_classes([IsAuthenticated])
-@transaction.atomic
-def create_booking(request):
-    package = get_object_or_404(SessionPackage, id=request.data.get("package_id"), is_active=True)
-
-    # Transactionally recheck that the mentor is still verified and active.
-    mentor = package.mentor
-    is_eligible = (
-        mentor.is_active
-        and mentor.is_verified
-        and mentor.user.is_active
-        and MentorApplication.objects.filter(
-            user=mentor.user,
-            status=MentorApplication.Status.VERIFIED,
-        ).exists()
-    )
-    if not is_eligible:
+    # Without date params return the legacy response.
+    if not from_str or not to_str:
         return Response(
-            {"code": "mentor_not_available", "detail": "This mentor is not currently available for bookings."},
-            status=status.HTTP_403_FORBIDDEN,
+            {
+                "mentor_id": mentor.id,
+                "weekly_windows": [_availability_window_payload(w) for w in mentor.availability.filter(is_active=True)],
+                "booked_starts": list(booked.values_list("starts_at", flat=True)),
+            }
         )
 
-    session = MentorshipSession.objects.create(
-        mentee=request.user,
-        mentor=mentor,
-        package=package,
-        starts_at=request.data.get("starts_at"),
-        goals=request.data.get("goals", ""),
-        topic=request.data.get("topic", ""),
-        status=MentorshipSession.Status.PENDING_PAYMENT,
-    )
-    Payment.objects.create(session=session, amount_usd=package.price_usd)
-    return Response({"session_id": session.id, "payment_status": session.payment.status}, status=status.HTTP_201_CREATED)
+    # --- Concrete slots ---
+    try:
+        from_date = date.fromisoformat(from_str)
+        to_date = date.fromisoformat(to_str)
+    except ValueError:
+        return Response({"detail": "from and to must be YYYY-MM-DD dates."}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        duration_minutes = int(request.query_params.get("duration_minutes", 30))
+    except (TypeError, ValueError):
+        return Response({"detail": "duration_minutes must be an integer."}, status=status.HTTP_400_BAD_REQUEST)
+
+    tz_str = request.query_params.get("timezone", "UTC")
+    try:
+        local_tz = zoneinfo.ZoneInfo(tz_str)
+    except Exception:
+        return Response({"detail": f"Invalid timezone '{tz_str}'."}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Build a set of already-booked slot starts (UTC-aware datetimes).
+    booked_starts = set(booked.values_list("starts_at", flat=True))
+
+    # Map Django's 0-based weekday (Mon=0) to ISO 1-based (Mon=1) used by AvailabilityWindow.
+    windows = mentor.availability.filter(is_active=True)
+    window_map = {}  # iso_weekday -> [(starts_at, ends_at, interval_minutes)]
+    for w in windows:
+        iso_wd = w.weekday + 1  # convert 0-based → 1-based
+        window_map.setdefault(iso_wd, []).append((w.starts_at, w.ends_at, w.slot_interval_minutes))
+
+    now_utc = timezone.now()
+    slots = []
+    current = from_date
+    while current <= to_date:
+        iso_wd = current.isoweekday()  # 1=Mon … 7=Sun
+        for (win_start, win_end, interval) in window_map.get(iso_wd, []):
+            # Build naive local datetimes for this window on this date.
+            slot_start = datetime(current.year, current.month, current.day,
+                                   win_start.hour, win_start.minute, tzinfo=local_tz)
+            window_end_dt = datetime(current.year, current.month, current.day,
+                                      win_end.hour, win_end.minute, tzinfo=local_tz)
+
+            while slot_start < window_end_dt:
+                slot_end = slot_start + td(minutes=duration_minutes)
+                if slot_end > window_end_dt:
+                    break  # slot doesn't fit in this window
+                slot_start_utc = slot_start.astimezone(timezone.utc)
+                if slot_start_utc > now_utc:  # don't offer past slots
+                    available = slot_start_utc not in booked_starts
+                    slots.append({
+                        "starts_at": slot_start.isoformat(),
+                        "ends_at": slot_end.isoformat(),
+                        "available": available,
+                    })
+                slot_start += td(minutes=interval)
+
+        current += td(days=1)
+
+    return Response({
+        "mentor_id": mentor.id,
+        "timezone": tz_str,
+        "duration_minutes": duration_minutes,
+        "slots": slots,
+    })
 
 
 @api_view(("GET",))
@@ -1890,3 +2046,201 @@ def _verified_mentor_qs():
         user__is_active=True,
         user__mentor_application__status=MentorApplication.Status.VERIFIED,
     )
+
+
+# =============================================================================
+# Health endpoint
+# =============================================================================
+
+@api_view(("GET",))
+@authentication_classes([])
+@permission_classes([AllowAny])
+def health_check(request):
+    """GET /api/health/ — unauthenticated liveness probe."""
+    return Response({"status": "ok"})
+
+
+# =============================================================================
+# Session list + self-service cancel
+# =============================================================================
+
+def _session_detail_payload(session):
+    """Full session payload for both mentor and mentee views."""
+    payload = {
+        "id": session.id,
+        "mentor_id": session.mentor_id,
+        "mentor_name": session.mentor.user.get_full_name() or session.mentor.user.email,
+        "mentee_id": session.mentee_id,
+        "mentee_name": session.mentee.get_full_name() or session.mentee.email,
+        "starts_at": session.starts_at.isoformat() + "Z" if session.starts_at else None,
+        "duration_minutes": session.package.duration_minutes,
+        "price_usd": float(session.package.price_usd),
+        "topic": session.topic,
+        "goals": session.goals,
+        "status": session.status,
+        "video_room_url": session.video_room_url,
+        "created_at": session.created_at.isoformat() + "Z",
+        "updated_at": session.updated_at.isoformat() + "Z",
+    }
+    payment = getattr(session, "payment", None)
+    if payment:
+        payload["payment"] = {
+            "status": payment.status,
+            "amount_usd": float(payment.amount_usd),
+            "paid_at": payment.paid_at.isoformat() + "Z" if payment.paid_at else None,
+        }
+    else:
+        payload["payment"] = None
+    return payload
+
+
+@api_view(("GET",))
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def session_list(request):
+    """GET /api/sessions/ — paginated list of the authenticated user's sessions."""
+    qs = MentorshipSession.objects.filter(
+        Q(mentee=request.user) | Q(mentor__user=request.user)
+    ).select_related("mentor__user", "mentee", "package").order_by("-starts_at")
+
+    # Filters
+    sess_status = request.query_params.get("status")
+    if sess_status:
+        qs = qs.filter(status=sess_status)
+
+    from_dt = request.query_params.get("from")
+    to_dt = request.query_params.get("to")
+    if from_dt:
+        qs = qs.filter(starts_at__gte=from_dt)
+    if to_dt:
+        qs = qs.filter(starts_at__lte=to_dt)
+
+    # Pagination
+    try:
+        page = max(1, int(request.query_params.get("page", 1)))
+        page_size = min(100, max(1, int(request.query_params.get("page_size", 20))))
+    except (TypeError, ValueError):
+        page, page_size = 1, 20
+
+    total = qs.count()
+    start = (page - 1) * page_size
+
+    return Response({
+        "count": total,
+        "page": page,
+        "page_size": page_size,
+        "has_next": start + page_size < total,
+        "has_previous": page > 1,
+        "results": [_session_detail_payload(s) for s in qs[start: start + page_size]],
+    })
+
+
+@api_view(("POST",))
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+@transaction.atomic
+def cancel_session(request, session_id):
+    """POST /api/sessions/<id>/cancel/ — mentee or mentor self-service cancel."""
+    session = get_object_or_404(
+        MentorshipSession.objects.select_related("mentor__user", "mentee"),
+        Q(mentee=request.user) | Q(mentor__user=request.user),
+        id=session_id,
+    )
+
+    cancellable = {
+        MentorshipSession.Status.PENDING_PAYMENT,
+        MentorshipSession.Status.CONFIRMED,
+        MentorshipSession.Status.DRAFT,
+    }
+    if session.status not in cancellable:
+        return Response(
+            {
+                "code": "invalid_transition",
+                "detail": f"A session in '{session.status}' status cannot be cancelled.",
+            },
+            status=status.HTTP_409_CONFLICT,
+        )
+
+    session.status = MentorshipSession.Status.CANCELLED
+    session.save(update_fields=["status", "updated_at"])
+
+    return Response({
+        "session_id": session.id,
+        "status": session.status,
+    })
+
+
+# =============================================================================
+# Bookings — GET (list) + POST (create) on same URL
+# =============================================================================
+
+@api_view(("GET", "POST"))
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+@transaction.atomic
+def bookings(request):
+    """
+    GET  /api/bookings/ — paginated list of the caller's sessions.
+    POST /api/bookings/ — create a new booking.
+    """
+    if request.method == "GET":
+        qs = MentorshipSession.objects.filter(
+            Q(mentee=request.user) | Q(mentor__user=request.user)
+        ).select_related("mentor__user", "mentee", "package").order_by("-starts_at")
+
+        sess_status = request.query_params.get("status")
+        if sess_status:
+            qs = qs.filter(status=sess_status)
+        from_dt = request.query_params.get("from")
+        to_dt = request.query_params.get("to")
+        if from_dt:
+            qs = qs.filter(starts_at__gte=from_dt)
+        if to_dt:
+            qs = qs.filter(starts_at__lte=to_dt)
+
+        try:
+            page = max(1, int(request.query_params.get("page", 1)))
+            page_size = min(100, max(1, int(request.query_params.get("page_size", 20))))
+        except (TypeError, ValueError):
+            page, page_size = 1, 20
+
+        total = qs.count()
+        start = (page - 1) * page_size
+        return Response({
+            "count": total,
+            "page": page,
+            "page_size": page_size,
+            "has_next": start + page_size < total,
+            "has_previous": page > 1,
+            "results": [_session_detail_payload(s) for s in qs[start: start + page_size]],
+        })
+
+    # POST — create booking
+    package = get_object_or_404(SessionPackage, id=request.data.get("package_id"), is_active=True)
+    mentor = package.mentor
+    is_eligible = (
+        mentor.is_active
+        and mentor.is_verified
+        and mentor.user.is_active
+        and MentorApplication.objects.filter(
+            user=mentor.user,
+            status=MentorApplication.Status.VERIFIED,
+        ).exists()
+    )
+    if not is_eligible:
+        return Response(
+            {"code": "mentor_not_available", "detail": "This mentor is not currently available for bookings."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    session = MentorshipSession.objects.create(
+        mentee=request.user,
+        mentor=mentor,
+        package=package,
+        starts_at=request.data.get("starts_at"),
+        goals=request.data.get("goals", ""),
+        topic=request.data.get("topic", ""),
+        status=MentorshipSession.Status.PENDING_PAYMENT,
+    )
+    Payment.objects.create(session=session, amount_usd=package.price_usd)
+    return Response({"session_id": session.id, "payment_status": session.payment.status}, status=status.HTTP_201_CREATED)
