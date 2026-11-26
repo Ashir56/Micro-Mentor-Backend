@@ -65,7 +65,9 @@ def _get_request_data(request):
 
 
 def _mentor_summary(mentor):
-    rating = mentor.reviews.aggregate(avg=Avg("rating"))["avg"] or 0
+    rating = mentor.reviews.filter(
+        visibility_status=Review.VisibilityStatus.PUBLISHED
+    ).aggregate(avg=Avg("rating"))["avg"] or 0
     session_count = mentor.sessions.exclude(status=MentorshipSession.Status.DRAFT).count()
     user = mentor.user
     profile = getattr(user, "profile", None)
@@ -78,7 +80,7 @@ def _mentor_summary(mentor):
         "rating": round(rating, 1),
         "sessions": session_count,
         "repeat_rate": float(mentor.repeat_rate),
-        "verified": profile.is_linkedin_verified if profile else False,
+        "verified": mentor.is_verified,
         "starting_price": min((float(pkg.price_usd) for pkg in mentor.packages.filter(is_active=True)), default=None),
         "expertise": list(mentor.expertise.values_list("name", flat=True)),
     }
@@ -867,10 +869,25 @@ def login_view(request):
 @permission_classes([AllowAny])
 def token_refresh(request):
     data = _get_request_data(request)
-    serializer = TokenRefreshSerializer(data={"refresh": data.get("refresh_token") or data.get("refresh")})
-    serializer.is_valid(raise_exception=True)
-    data = serializer.validated_data
-    return Response({"access_token": data["access"], "refresh_token": data.get("refresh")})
+    refresh_value = data.get("refresh_token") or data.get("refresh")
+
+    if not refresh_value:
+        return Response(
+            {"detail": "refresh_token is required.", "code": "token_not_provided"},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    serializer = TokenRefreshSerializer(data={"refresh": refresh_value})
+    try:
+        serializer.is_valid(raise_exception=True)
+    except Exception:
+        return Response(
+            {"detail": "Token is invalid or expired.", "code": "token_not_valid"},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    validated = serializer.validated_data
+    return Response({"access_token": validated["access"], "refresh_token": validated.get("refresh")})
 
 
 @api_view(("POST",))
@@ -999,7 +1016,15 @@ def mentor_list(request):
             | Q(expertise__name__icontains=query)
         ).distinct()
     if category:
-        mentors = mentors.filter(categories__slug=category)
+        # Accept category ID (integer), slug, or name
+        try:
+            cat_id = int(category)
+            mentors = mentors.filter(categories__id=cat_id)
+        except (ValueError, TypeError):
+            # Try slug first, then name
+            mentors = mentors.filter(
+                Q(categories__slug=category) | Q(categories__name__iexact=category)
+            ).distinct()
 
     # Pagination
     try:
@@ -2039,12 +2064,17 @@ def admin_document_download(request, application_id, document_id):
 # =============================================================================
 
 def _verified_mentor_qs():
-    """Base queryset for publicly visible mentors."""
+    """Base queryset for publicly visible mentors.
+    
+    Uses is_verified as the single gate. The approval flow sets is_verified=True
+    when it creates/updates the MentorProfile. Seed/migrated mentors that were
+    active before the onboarding system may not have a MentorApplication row,
+    so we cannot require application status here.
+    """
     return MentorProfile.objects.filter(
         is_active=True,
         is_verified=True,
         user__is_active=True,
-        user__mentor_application__status=MentorApplication.Status.VERIFIED,
     )
 
 

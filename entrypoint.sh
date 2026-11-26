@@ -13,6 +13,12 @@ else
     echo "Migrations failed; continuing so the app can still serve health checks"
 fi
 
+if python manage.py fix_seed_data; then
+    echo "Seed data fixed"
+else
+    echo "fix_seed_data failed; continuing"
+fi
+
 if python manage.py collectstatic --noinput --clear; then
     echo "Collectstatic completed"
 else
