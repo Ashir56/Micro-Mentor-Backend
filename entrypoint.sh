@@ -19,6 +19,12 @@ else
     echo "fix_seed_data failed; continuing"
 fi
 
+if python manage.py seed_availability; then
+    echo "Availability seeded"
+else
+    echo "seed_availability failed; continuing"
+fi
+
 if python manage.py collectstatic --noinput --clear; then
     echo "Collectstatic completed"
 else

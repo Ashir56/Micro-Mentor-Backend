@@ -868,7 +868,11 @@ def login_view(request):
 @authentication_classes([])
 @permission_classes([AllowAny])
 def token_refresh(request):
-    data = _get_request_data(request)
+    try:
+        data = _get_request_data(request)
+    except Exception:
+        data = {}
+
     refresh_value = data.get("refresh_token") or data.get("refresh")
 
     if not refresh_value:
@@ -877,8 +881,8 @@ def token_refresh(request):
             status=status.HTTP_401_UNAUTHORIZED,
         )
 
-    serializer = TokenRefreshSerializer(data={"refresh": refresh_value})
     try:
+        serializer = TokenRefreshSerializer(data={"refresh": refresh_value})
         serializer.is_valid(raise_exception=True)
     except Exception:
         return Response(
@@ -1019,12 +1023,12 @@ def mentor_list(request):
         # Accept category ID (integer), slug, or name
         try:
             cat_id = int(category)
-            mentors = mentors.filter(categories__id=cat_id)
+            mentors = mentors.filter(categories__id=cat_id).distinct()
         except (ValueError, TypeError):
-            # Try slug first, then name
-            mentors = mentors.filter(
-                Q(categories__slug=category) | Q(categories__name__iexact=category)
-            ).distinct()
+            # Try slug first, then fall back to name
+            cat = Category.objects.filter(slug=category).first() or Category.objects.filter(name__iexact=category).first()
+            if cat:
+                mentors = mentors.filter(categories=cat)
 
     # Pagination
     try:
@@ -1150,7 +1154,8 @@ def mentor_availability(request, mentor_id):
                 slot_end = slot_start + td(minutes=duration_minutes)
                 if slot_end > window_end_dt:
                     break  # slot doesn't fit in this window
-                slot_start_utc = slot_start.astimezone(timezone.utc)
+                import datetime as _dt
+                slot_start_utc = slot_start.astimezone(_dt.timezone.utc)
                 if slot_start_utc > now_utc:  # don't offer past slots
                     available = slot_start_utc not in booked_starts
                     slots.append({
